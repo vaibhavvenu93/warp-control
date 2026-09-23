@@ -14,7 +14,7 @@ export function PulseDashboard() {
     <div className="page">
       <section className="hero">
         <div>
-          <div className="eyebrow">CEO BRIEF Â· MONDAY 08:00</div>
+          <div className="eyebrow">CEO BRIEF · MONDAY 08:00</div>
           <h1>Good morning, Surya.</h1>
           <p className="hero-copy">
             Here&apos;s what changed across WarpBuild and what deserves your
@@ -91,7 +91,7 @@ export function PulseDashboard() {
                 <div className="signal-main">
                   <div className="signal-meta">
                     <span>{item.id}</span>
-                    <span>Â·</span>
+                    <span>·</span>
                     <span>{item.category}</span>
                     <EvidenceBadge type={item.evidence} />
                   </div>
@@ -99,7 +99,7 @@ export function PulseDashboard() {
                   <p>{item.summary}</p>
                   <div className="signal-footer">
                     <span>Confidence {item.confidence}%</span>
-                    <button>{item.action} â†’</button>
+                    <button>{item.action} →</button>
                   </div>
                 </div>
               </article>
@@ -152,3 +152,4 @@ export function PulseDashboard() {
     </div>
   );
 }
+

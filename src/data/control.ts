@@ -3,7 +3,7 @@
 export const headlineMetrics: Metric[] = [
   {
     label: "Revenue",
-    value: "$â€”",
+    value: "$—",
     change: "Connect billing",
     trend: "flat",
     evidence: "ASSUMED",
@@ -11,7 +11,7 @@ export const headlineMetrics: Metric[] = [
   },
   {
     label: "Active customers",
-    value: "â€”",
+    value: "—",
     change: "Connect CRM",
     trend: "flat",
     evidence: "ASSUMED",
@@ -19,7 +19,7 @@ export const headlineMetrics: Metric[] = [
   },
   {
     label: "CI consumption",
-    value: "â€”",
+    value: "—",
     change: "Connect usage",
     trend: "flat",
     evidence: "ASSUMED",

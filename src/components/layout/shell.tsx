@@ -105,7 +105,7 @@ export function Topbar() {
       <button className="command">
         <Search size={16} />
         <span>Ask WARP / CONTROL anything</span>
-        <kbd>âŒ˜ K</kbd>
+        <kbd>Ctrl K</kbd>
       </button>
 
       <div className="topbar-right">
@@ -118,3 +118,4 @@ export function Topbar() {
     </header>
   );
 }
+
