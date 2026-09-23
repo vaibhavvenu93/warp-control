@@ -25,14 +25,16 @@ export class RevenueIntelligenceService {
   register(): () => void {
     return this.eventBus.subscribe<SignalDetectedPayload>(
       "SIGNAL_DETECTED",
-      (event) => this.handleSignalDetected(event),
+      (event) =>
+        this.handleSignalDetected(event),
     );
   }
 
   async handleSignalDetected(
     event: DomainEvent<SignalDetectedPayload>,
   ): Promise<void> {
-    const accountId = event.aggregateId;
+    const accountId =
+      event.aggregateId;
 
     const [
       account,
@@ -41,8 +43,12 @@ export class RevenueIntelligenceService {
       previousScore,
     ] = await Promise.all([
       this.repository.getAccount(accountId),
-      this.repository.getSignalsForAccount(accountId),
-      this.repository.getEvidenceForAccount(accountId),
+      this.repository.getSignalsForAccount(
+        accountId,
+      ),
+      this.repository.getEvidenceForAccount(
+        accountId,
+      ),
       this.repository.getWarpScore(accountId),
     ]);
 
@@ -50,94 +56,168 @@ export class RevenueIntelligenceService {
       return;
     }
 
-    const nextScore = calculateWarpScore({
-      account,
-      signals,
-      evidence,
-      now: this.now(),
-    });
+    const nextScore =
+      calculateWarpScore({
+        account,
+        signals,
+        evidence,
+        now: this.now(),
+      });
 
-    await this.repository.saveWarpScore(nextScore);
+    await this.repository.saveWarpScore(
+      nextScore,
+    );
 
-    const previousValue = previousScore?.score ?? 0;
+    const previousValue =
+      previousScore?.score ?? 0;
 
-    if (previousValue !== nextScore.score) {
+    if (
+      previousValue !==
+      nextScore.score
+    ) {
       await this.eventBus.publish(
         createDomainEvent({
-          type: "WARP_SCORE_CHANGED",
-          aggregateType: "ACCOUNT",
-          aggregateId: accountId,
+          type:
+            "WARP_SCORE_CHANGED",
+
+          aggregateType:
+            "ACCOUNT",
+
+          aggregateId:
+            accountId,
 
           payload: {
-            previousScore: previousValue,
-            nextScore: nextScore.score,
+            accountId,
+
+            previousScore:
+              previousValue,
+
+            nextScore:
+              nextScore.score,
+
             classification:
               nextScore.classification,
+
             confidence:
               nextScore.confidence,
-            version: nextScore.version,
+
+            version:
+              nextScore.version,
           },
 
           source: "SYSTEM",
-          correlationId: event.correlationId,
-          causationId: event.id,
-          occurredAt: this.now().toISOString(),
+
+          correlationId:
+            event.correlationId,
+
+          causationId:
+            event.id,
+
+          occurredAt:
+            this.now().toISOString(),
         }),
       );
     }
 
     const crossedQualifiedThreshold =
-      previousValue < QUALIFIED_THRESHOLD &&
-      nextScore.score >= QUALIFIED_THRESHOLD;
+      previousValue <
+        QUALIFIED_THRESHOLD &&
+      nextScore.score >=
+        QUALIFIED_THRESHOLD;
 
-    if (crossedQualifiedThreshold) {
+    if (
+      crossedQualifiedThreshold
+    ) {
       await this.eventBus.publish(
         createDomainEvent({
-          type: "ACCOUNT_QUALIFIED",
-          aggregateType: "ACCOUNT",
-          aggregateId: accountId,
+          type:
+            "ACCOUNT_QUALIFIED",
+
+          aggregateType:
+            "ACCOUNT",
+
+          aggregateId:
+            accountId,
 
           payload: {
-            score: nextScore.score,
+            accountId,
+
+            warpScore:
+              nextScore.score,
+
+            score:
+              nextScore.score,
+
             confidence:
               nextScore.confidence,
+
             classification:
               nextScore.classification,
           },
 
           source: "SYSTEM",
-          correlationId: event.correlationId,
-          causationId: event.id,
-          occurredAt: this.now().toISOString(),
+
+          correlationId:
+            event.correlationId,
+
+          causationId:
+            event.id,
+
+          occurredAt:
+            this.now().toISOString(),
         }),
       );
     }
 
     const crossedHighPriorityThreshold =
-      previousValue < HIGH_PRIORITY_THRESHOLD &&
-      nextScore.score >= HIGH_PRIORITY_THRESHOLD;
+      previousValue <
+        HIGH_PRIORITY_THRESHOLD &&
+      nextScore.score >=
+        HIGH_PRIORITY_THRESHOLD;
 
-    if (crossedHighPriorityThreshold) {
+    if (
+      crossedHighPriorityThreshold
+    ) {
       await this.eventBus.publish(
         createDomainEvent({
-          type: "DECISION_REQUIRED",
-          aggregateType: "ACCOUNT",
-          aggregateId: accountId,
+          type:
+            "DECISION_REQUIRED",
+
+          aggregateType:
+            "ACCOUNT",
+
+          aggregateId:
+            accountId,
 
           payload: {
+            accountId,
+
             decision:
               "Review high-priority WarpBuild account",
-            score: nextScore.score,
+
+            score:
+              nextScore.score,
+
             confidence:
               nextScore.confidence,
+
+            classification:
+              nextScore.classification,
+
             reason:
               "Account crossed the high-priority WarpScore threshold.",
           },
 
           source: "SYSTEM",
-          correlationId: event.correlationId,
-          causationId: event.id,
-          occurredAt: this.now().toISOString(),
+
+          correlationId:
+            event.correlationId,
+
+          causationId:
+            event.id,
+
+          occurredAt:
+            this.now().toISOString(),
         }),
       );
     }
