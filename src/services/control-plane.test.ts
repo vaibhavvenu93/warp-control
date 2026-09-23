@@ -13,11 +13,14 @@ import {
   buildRevenueDemo,
 } from "@/services/control-plane";
 
+const EXPERIMENT_CORRELATION_ID =
+  "corr-experiment-demo-001";
+
 describe(
-  "Revenue Intelligence Control Plane",
+  "Company Intelligence Control Plane",
   () => {
     it(
-      "executes the full signal-to-agent pipeline",
+      "executes revenue and experiment intelligence through the shared control plane",
       async () => {
         const snapshot =
           await buildRevenueDemo();
@@ -40,19 +43,28 @@ describe(
 
         expect(
           snapshot.agentRuns,
-        ).toHaveLength(1);
+        ).toHaveLength(2);
 
         expect(
-          snapshot.agentRuns[0]
-            .agent,
-        ).toBe(
-          "REVENUE_INTELLIGENCE",
+          snapshot.agentRuns.map(
+            (run) => run.agent,
+          ),
+        ).toEqual(
+          expect.arrayContaining([
+            "REVENUE_INTELLIGENCE",
+            "EXPERIMENT_ANALYST",
+          ]),
         );
+
+        expect(
+          snapshot.telemetry
+            .agentRunCount,
+        ).toBe(2);
       },
     );
 
     it(
-      "preserves one correlation chain across the control plane",
+      "preserves independent revenue and experiment correlation chains",
       async () => {
         const snapshot =
           await buildRevenueDemo();
@@ -65,13 +77,43 @@ describe(
         );
 
         expect(
-          snapshot.events.length,
+          snapshot.telemetry
+            .correlationIds,
+        ).toEqual(
+          expect.arrayContaining([
+            DEMO_CORRELATION_ID,
+            EXPERIMENT_CORRELATION_ID,
+          ]),
+        );
+
+        const revenueEvents =
+          snapshot.events.filter(
+            (event) =>
+              event.correlationId ===
+              DEMO_CORRELATION_ID,
+          );
+
+        const experimentEvents =
+          snapshot.events.filter(
+            (event) =>
+              event.correlationId ===
+              EXPERIMENT_CORRELATION_ID,
+          );
+
+        expect(
+          revenueEvents.length,
         ).toBeGreaterThanOrEqual(
           4,
         );
 
         expect(
-          snapshot.events.every(
+          experimentEvents.length,
+        ).toBeGreaterThanOrEqual(
+          2,
+        );
+
+        expect(
+          revenueEvents.every(
             (event) =>
               event.correlationId ===
               DEMO_CORRELATION_ID,
@@ -79,13 +121,48 @@ describe(
         ).toBe(true);
 
         expect(
-          snapshot.agentRuns.every(
-            (run) =>
-              run.input
-                .correlationId ===
-              DEMO_CORRELATION_ID,
+          experimentEvents.every(
+            (event) =>
+              event.correlationId ===
+              EXPERIMENT_CORRELATION_ID,
           ),
         ).toBe(true);
+
+        const revenueRun =
+          snapshot.agentRuns.find(
+            (run) =>
+              run.agent ===
+              "REVENUE_INTELLIGENCE",
+          );
+
+        const experimentRun =
+          snapshot.agentRuns.find(
+            (run) =>
+              run.agent ===
+              "EXPERIMENT_ANALYST",
+          );
+
+        expect(
+          revenueRun,
+        ).toBeDefined();
+
+        expect(
+          experimentRun,
+        ).toBeDefined();
+
+        expect(
+          revenueRun!.input
+            .correlationId,
+        ).toBe(
+          DEMO_CORRELATION_ID,
+        );
+
+        expect(
+          experimentRun!.input
+            .correlationId,
+        ).toBe(
+          EXPERIMENT_CORRELATION_ID,
+        );
       },
     );
 
@@ -163,81 +240,252 @@ describe(
     );
 
     it(
-      "records agent observability metadata",
+      "records observability metadata for both agents",
       async () => {
         const snapshot =
           await buildRevenueDemo();
 
-        const run =
-          snapshot.agentRuns[0];
+        const revenueRun =
+          snapshot.agentRuns.find(
+            (run) =>
+              run.agent ===
+              "REVENUE_INTELLIGENCE",
+          );
+
+        const experimentRun =
+          snapshot.agentRuns.find(
+            (run) =>
+              run.agent ===
+              "EXPERIMENT_ANALYST",
+          );
 
         expect(
-          run.toolsCalled,
+          revenueRun,
+        ).toBeDefined();
+
+        expect(
+          experimentRun,
+        ).toBeDefined();
+
+        expect(
+          revenueRun!.toolsCalled,
         ).toContain(
           "warp_score",
         );
 
         expect(
-          run.toolsCalled,
+          revenueRun!.toolsCalled,
         ).toContain(
           "opportunity_engine",
         );
 
         expect(
-          run.confidence,
-        ).toBeGreaterThan(0);
+          experimentRun!
+            .toolsCalled,
+        ).toContain(
+          "experiment_decision_engine",
+        );
 
         expect(
-          run.completedAt,
-        ).toBeDefined();
+          experimentRun!
+            .toolsCalled,
+        ).toContain(
+          "portfolio_optimizer",
+        );
 
         expect(
-          run.latencyMs,
-        ).toBeDefined();
-      },
-    );
+          experimentRun!
+            .toolsCalled,
+        ).toContain(
+          "evidence_graph",
+        );
 
-    it(
-      "surfaces human judgment when policy requires it",
-      async () => {
-        const snapshot =
-          await buildRevenueDemo();
-
-        const requiresHuman =
-          snapshot.agentRuns.some(
-            (run) =>
-              run.status ===
-              "REQUIRES_HUMAN",
-          );
-
-        if (
-          requiresHuman
+        for (
+          const run of
+          snapshot.agentRuns
         ) {
           expect(
-            snapshot.decisions.some(
-              (decision) =>
-                decision.status ===
-                "REQUIRES_HUMAN",
-            ),
-          ).toBe(true);
+            run.confidence,
+          ).toBeGreaterThan(0);
 
           expect(
-            snapshot.telemetry
-              .humanReviewCount,
-          ).toBeGreaterThan(0);
-        } else {
+            run.completedAt,
+          ).toBeDefined();
+
           expect(
-            snapshot.agentRuns[0]
-              .status,
-          ).toBe(
-            "COMPLETED",
-          );
+            run.latencyMs,
+          ).toBeDefined();
         }
       },
     );
 
     it(
-      "never presents the demo scenario as verified WarpBuild customer data",
+      "surfaces human judgment from revenue and experiment policy boundaries",
+      async () => {
+        const snapshot =
+          await buildRevenueDemo();
+
+        const humanRuns =
+          snapshot.agentRuns.filter(
+            (run) =>
+              run.status ===
+              "REQUIRES_HUMAN",
+          );
+
+        expect(
+          humanRuns.length,
+        ).toBeGreaterThanOrEqual(
+          1,
+        );
+
+        expect(
+          snapshot.decisions.some(
+            (decision) =>
+              decision.status ===
+              "REQUIRES_HUMAN",
+          ),
+        ).toBe(true);
+
+        expect(
+          snapshot.telemetry
+            .humanReviewCount,
+        ).toBe(
+          humanRuns.length,
+        );
+
+        expect(
+          snapshot.telemetry
+            .decisionCount,
+        ).toBe(
+          snapshot.decisions.length,
+        );
+
+        const experimentDecision =
+          snapshot.decisions.find(
+            (decision) =>
+              decision.agent ===
+              "EXPERIMENT_ANALYST",
+          );
+
+        expect(
+          experimentDecision,
+        ).toBeDefined();
+
+        expect(
+          experimentDecision!
+            .source,
+        ).toBe(
+          "AGENT",
+        );
+
+        expect(
+          experimentDecision!
+            .correlationId,
+        ).toBe(
+          EXPERIMENT_CORRELATION_ID,
+        );
+      },
+    );
+
+    it(
+      "projects experiment portfolio approval without duplicating the agent decision",
+      async () => {
+        const snapshot =
+          await buildRevenueDemo();
+
+        const experimentRuns =
+          snapshot.agentRuns.filter(
+            (run) =>
+              run.agent ===
+              "EXPERIMENT_ANALYST" &&
+              run.status ===
+              "REQUIRES_HUMAN",
+          );
+
+        const experimentDecisions =
+          snapshot.decisions.filter(
+            (decision) =>
+              decision.agent ===
+              "EXPERIMENT_ANALYST",
+          );
+
+        expect(
+          experimentRuns,
+        ).toHaveLength(1);
+
+        expect(
+          experimentDecisions,
+        ).toHaveLength(1);
+
+        expect(
+          experimentDecisions[0]
+            .title.length,
+        ).toBeGreaterThan(0);
+
+        expect(
+          experimentDecisions[0]
+            .reason.length,
+        ).toBeGreaterThan(0);
+      },
+    );
+
+    it(
+      "records experiment agent and decision events in the shared event store",
+      async () => {
+        const snapshot =
+          await buildRevenueDemo();
+
+        const experimentEvents =
+          snapshot.events.filter(
+            (event) =>
+              event.correlationId ===
+              EXPERIMENT_CORRELATION_ID,
+          );
+
+        expect(
+          experimentEvents.some(
+            (event) =>
+              event.type ===
+              "AGENT_RUN_COMPLETED",
+          ),
+        ).toBe(true);
+
+        expect(
+          experimentEvents.some(
+            (event) =>
+              event.type ===
+              "DECISION_REQUIRED",
+          ),
+        ).toBe(true);
+
+        const decisionEvent =
+          experimentEvents.find(
+            (event) =>
+              event.type ===
+              "DECISION_REQUIRED",
+          );
+
+        expect(
+          decisionEvent,
+        ).toBeDefined();
+
+        expect(
+          decisionEvent!.source,
+        ).toBe(
+          "AGENT",
+        );
+
+        expect(
+          decisionEvent!.payload
+            .decisionType,
+        ).toBe(
+          "EXPERIMENT_PORTFOLIO_APPROVAL",
+        );
+      },
+    );
+
+    it(
+      "never presents the demo scenario as verified WarpBuild customer or experiment data",
       async () => {
         const snapshot =
           await buildRevenueDemo();
@@ -253,6 +501,20 @@ describe(
             .disclaimer,
         ).toContain(
           "Synthetic demonstration account",
+        );
+
+        expect(
+          snapshot.scenario
+            .disclaimer,
+        ).toContain(
+          "no WarpBuild customer",
+        );
+
+        expect(
+          snapshot.scenario
+            .disclaimer,
+        ).toContain(
+          "experiment-performance data",
         );
 
         expect(

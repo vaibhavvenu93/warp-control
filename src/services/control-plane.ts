@@ -2,7 +2,9 @@ import {
   InMemoryAgentRunRepository,
 } from "@/agents/contracts/agent";
 
-import { AgentRuntime } from "@/agents/runtime/agent-runtime";
+import {
+  AgentRuntime,
+} from "@/agents/runtime/agent-runtime";
 
 import {
   DEMO_ACCOUNT_ID,
@@ -13,20 +15,48 @@ import {
   demoSignals,
 } from "@/data/demo/revenue-scenario";
 
-import { createDomainEvent } from "@/events/create-event";
-import { EventBus } from "@/events/event-bus";
-import { InMemoryEventStore } from "@/events/event-store";
+import {
+  createDomainEvent,
+} from "@/events/create-event";
 
-import { InMemoryOpportunityRepository } from "@/repositories/opportunity-repository";
-import { InMemoryRevenueRepository } from "@/repositories/revenue-repository";
+import {
+  EventBus,
+} from "@/events/event-bus";
+
+import {
+  InMemoryEventStore,
+} from "@/events/event-store";
+
+import {
+  InMemoryOpportunityRepository,
+} from "@/repositories/opportunity-repository";
+
+import {
+  InMemoryRevenueRepository,
+} from "@/repositories/revenue-repository";
 
 import {
   buildControlPlaneDecisions,
   ControlPlaneSnapshot,
 } from "@/presentation/control-plane-snapshot";
 
-import { OpportunityOrchestrator } from "@/services/opportunity-orchestrator";
-import { RevenueIntelligenceService } from "@/services/revenue-intelligence";
+import {
+  ExperimentOrchestrator,
+} from "@/services/experiment-orchestrator";
+
+import {
+  OpportunityOrchestrator,
+} from "@/services/opportunity-orchestrator";
+
+import {
+  RevenueIntelligenceService,
+} from "@/services/revenue-intelligence";
+
+const EXPERIMENT_CORRELATION_ID =
+  "corr-experiment-demo-001";
+
+const EXPERIMENT_CAUSATION_ID =
+  "evt-experiment-review-001";
 
 export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
   const eventStore =
@@ -60,7 +90,7 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
     demoEvidence,
   );
 
-  const agentRuntime =
+  const revenueAgentRuntime =
     new AgentRuntime(
       agentRunRepository,
       eventBus,
@@ -85,8 +115,24 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
       revenueRepository,
       opportunityRepository,
       eventBus,
-      agentRuntime,
+      revenueAgentRuntime,
       () => DEMO_NOW,
+    );
+
+  const experimentOrchestrator =
+    new ExperimentOrchestrator(
+      eventBus,
+      agentRunRepository,
+      {
+        now: () =>
+          DEMO_NOW,
+
+        createRunId: () =>
+          "run-demo-experiment-001",
+
+        createDecisionId: () =>
+          "decision-demo-experiment-001",
+      },
     );
 
   const unregisterRevenue =
@@ -126,6 +172,14 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
       }),
     );
 
+    await experimentOrchestrator.analyze({
+      correlationId:
+        EXPERIMENT_CORRELATION_ID,
+
+      causationId:
+        EXPERIMENT_CAUSATION_ID,
+    });
+
     const warpScore =
       await revenueRepository.getWarpScore(
         DEMO_ACCOUNT_ID,
@@ -142,15 +196,35 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
         DEMO_ACCOUNT_ID,
       );
 
-    const agentRuns =
+    const revenueAgentRuns =
       await agentRunRepository.getByCorrelationId(
         DEMO_CORRELATION_ID,
       );
 
-    const events =
+    const experimentAgentRuns =
+      await agentRunRepository.getByCorrelationId(
+        EXPERIMENT_CORRELATION_ID,
+      );
+
+    const agentRuns = [
+      ...revenueAgentRuns,
+      ...experimentAgentRuns,
+    ];
+
+    const revenueEvents =
       await eventStore.getByCorrelationId(
         DEMO_CORRELATION_ID,
       );
+
+    const experimentEvents =
+      await eventStore.getByCorrelationId(
+        EXPERIMENT_CORRELATION_ID,
+      );
+
+    const events = [
+      ...revenueEvents,
+      ...experimentEvents,
+    ];
 
     const decisions =
       buildControlPlaneDecisions(
@@ -158,19 +232,24 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
         agentRuns,
       );
 
+    const correlationIds = [
+      DEMO_CORRELATION_ID,
+      EXPERIMENT_CORRELATION_ID,
+    ];
+
     return {
       generatedAt:
         DEMO_NOW.toISOString(),
 
       scenario: {
         name:
-          "Revenue Intelligence Control Plane",
+          "Company Intelligence Control Plane",
 
         mode:
           "DETERMINISTIC_DEMO",
 
         disclaimer:
-          "Synthetic demonstration account. PUBLIC, MODELED and ASSUMED evidence labels describe provenance; no WarpBuild customer or revenue data is implied.",
+          "Synthetic demonstration account and experiment environment. PUBLIC, MODELED and ASSUMED evidence labels describe provenance; no WarpBuild customer, revenue or experiment-performance data is implied.",
       },
 
       account:
@@ -219,6 +298,11 @@ export async function buildRevenueDemo(): Promise<ControlPlaneSnapshot> {
               run.status ===
               "REQUIRES_HUMAN",
           ).length,
+
+        decisionCount:
+          decisions.length,
+
+        correlationIds,
 
         correlationId:
           DEMO_CORRELATION_ID,

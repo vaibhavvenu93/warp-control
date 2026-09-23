@@ -5,6 +5,7 @@
 } from "lucide-react";
 
 import {
+  ControlPlaneDecision,
   ControlPlaneSnapshot,
 } from "@/presentation/control-plane-snapshot";
 
@@ -38,6 +39,36 @@ function readString(
     : fallback;
 }
 
+function readNumber(
+  value: unknown,
+): number | undefined {
+  return typeof value === "number"
+    ? value
+    : undefined;
+}
+
+function readStringArray(
+  value: unknown,
+): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string",
+      )
+    : [];
+}
+
+function isExperimentDecision(
+  decision: ControlPlaneDecision,
+): boolean {
+  return (
+    decision.agent ===
+      "EXPERIMENT_ANALYST" ||
+    decision.decisionType ===
+      "EXPERIMENT_PORTFOLIO_APPROVAL"
+  );
+}
+
 export function DecisionsDashboard({
   snapshot,
 }: DecisionsDashboardProps) {
@@ -50,33 +81,25 @@ export function DecisionsDashboard({
     evidence,
   } = snapshot;
 
-  const agentRun =
-    agentRuns[0];
-
-  const agentOutput =
-    agentRun?.output ?? {};
-
-  const nextAction =
-    readString(
-      agentOutput.nextAction,
-      "Review the recommended revenue motion.",
+  const revenueRun =
+    agentRuns.find(
+      (run) =>
+        run.agent ===
+        "REVENUE_INTELLIGENCE",
     );
 
-  const approvalReason =
-    readString(
-      agentOutput.approvalReason,
-      "Human judgment is required before execution.",
+  const experimentRun =
+    agentRuns.find(
+      (run) =>
+        run.agent ===
+        "EXPERIMENT_ANALYST",
     );
 
-  const missingInformation =
-  Array.isArray(
-    agentOutput.missingInformation,
-  )
-    ? agentOutput.missingInformation.filter(
-        (item): item is string =>
-          typeof item === "string",
-      )
-    : [];
+  const revenueOutput =
+    revenueRun?.output ?? {};
+
+  const experimentOutput =
+    experimentRun?.output ?? {};
 
   const supportingEvidence =
     opportunity
@@ -87,6 +110,42 @@ export function DecisionsDashboard({
             ),
         )
       : [];
+
+  const revenueMissingInformation =
+    readStringArray(
+      revenueOutput
+        .missingInformation,
+    );
+
+  const evidenceRequests =
+    readStringArray(
+      experimentOutput
+        .evidenceRequests,
+    );
+
+  const selectedExperimentIds =
+    readStringArray(
+      experimentOutput
+        .selectedExperimentIds,
+    );
+
+  const allocatedBudget =
+    readNumber(
+      experimentOutput
+        .allocatedBudget,
+    );
+
+  const modeledExpectedValue =
+    readNumber(
+      experimentOutput
+        .modeledExpectedValue,
+    );
+
+  const expectedPortfolioROI =
+    readNumber(
+      experimentOutput
+        .expectedPortfolioROI,
+    );
 
   return (
     <div className="page">
@@ -101,9 +160,10 @@ export function DecisionsDashboard({
           </h1>
 
           <p>
-            Evidence before opinion.
-            Recommendations remain
-            explainable. High-consequence
+            One queue across revenue,
+            experimentation and system
+            policy. Evidence before
+            opinion; high-consequence
             actions stop for human
             judgment.
           </p>
@@ -115,7 +175,7 @@ export function DecisionsDashboard({
           </strong>
 
           <span>
-            open decisions
+            OPEN DECISIONS
           </span>
         </div>
       </section>
@@ -128,7 +188,7 @@ export function DecisionsDashboard({
         }}
       >
         <span>
-          CONTROL PLANE LINKED
+          SHARED DECISION LAYER
         </span>
 
         <p
@@ -136,254 +196,425 @@ export function DecisionsDashboard({
             marginTop: 7,
           }}
         >
-          This queue is generated from
-          the same signal, scoring,
-          opportunity and agent runtime
-          used across Accounts, GTM and
-          Agents.
+          Revenue Intelligence,
+          Experiment Analyst and
+          deterministic system rules
+          converge here without losing
+          their original correlation,
+          causation or provenance.
         </p>
       </div>
 
       <div className="decision-list">
         {decisions.map(
-          (decision) => (
-            <article
-              className="decision-card"
-              key={decision.id}
-            >
-              <div className="decision-card-header">
-                <div>
-                  <div className="signal-meta">
-                    <span>
-                      {decision.source}
-                    </span>
+          (decision) => {
+            const experiment =
+              isExperimentDecision(
+                decision,
+              );
 
-                    <span>•</span>
+            const run =
+              experiment
+                ? experimentRun
+                : revenueRun;
 
-                    <span>
-                      {decision.status}
-                    </span>
+            const output =
+              run?.output ?? {};
 
-                    <span>•</span>
+            const recommendation =
+              experiment
+                ? readString(
+                    output.nextAction,
+                    "Confirm instrumentation, owner and launch criteria.",
+                  )
+                : readString(
+                    output.nextAction,
+                    "Review the recommended revenue motion.",
+                  );
 
-                    <span>
-                      {account.name}
-                    </span>
-                  </div>
+            const approvalReason =
+              experiment
+                ? readString(
+                    output.portfolioRecommendation,
+                    readString(
+                      output.reasoningSummary,
+                      "Human approval is required before allocating experiment capacity.",
+                    ),
+                  )
+                : readString(
+                    output.approvalReason,
+                    readString(
+                      output.reasoningSummary,
+                      "Human judgment is required before execution.",
+                    ),
+                  );
 
-                  <h2>
-                    {decision.title}
-                  </h2>
-                </div>
-
-                <div className="confidence-ring">
-                  <strong>
-                    {decision.confidence ??
-                      warpScore.confidence}
-                    %
-                  </strong>
-
-                  <span>
-                    confidence
-                  </span>
-                </div>
-              </div>
-
-              <div className="decision-columns">
-                <div>
-                  <div className="eyebrow">
-                    WHY NOW
-                  </div>
-
-                  <p>
-                    {decision.reason}
-                  </p>
-
-                  <div className="eyebrow space-top">
-                    SYSTEM RECOMMENDATION
-                  </div>
-
-                  <h3>
-                    {nextAction}
-                  </h3>
-
-                  <p>
-                    {approvalReason}
-                  </p>
-
-                  <div className="eyebrow space-top">
-                    SUPPORTING EVIDENCE
-                  </div>
-
-                  <ul className="evidence-list">
-                    {supportingEvidence
-                      .slice(0, 4)
-                      .map(
-                        (item) => (
-                          <li
-                            key={
-                              item.id
-                            }
-                          >
-                            <ShieldCheck
-                              size={
-                                15
-                              }
-                            />
-
-                            <span>
-                              {
-                                item.claim
-                              }
-                            </span>
-                          </li>
-                        ),
-                      )}
-                  </ul>
-                </div>
-
-                <div className="decision-economics">
+            return (
+              <article
+                className="decision-card"
+                key={decision.id}
+              >
+                <div className="decision-card-header">
                   <div>
+                    <div className="signal-meta">
+                      <span>
+                        {decision.source}
+                      </span>
+
+                      <span>•</span>
+
+                      <span>
+                        {decision.status}
+                      </span>
+
+                      <span>•</span>
+
+                      <span>
+                        {experiment
+                          ? "EXPERIMENT PORTFOLIO"
+                          : account.name}
+                      </span>
+                    </div>
+
+                    <h2>
+                      {decision.title}
+                    </h2>
+                  </div>
+
+                  <div className="confidence-ring">
+                    <strong>
+                      {decision.confidence ??
+                        warpScore.confidence}
+                      %
+                    </strong>
+
                     <span>
-                      WarpScore
+                      CONFIDENCE
                     </span>
+                  </div>
+                </div>
+
+                <div className="decision-columns">
+                  <div>
+                    <div className="eyebrow">
+                      WHY NOW
+                    </div>
 
                     <p>
-                      {
-                        warpScore.score
-                      }{" "}
-                      / 100
+                      {decision.reason}
+                    </p>
+
+                    <div className="eyebrow space-top">
+                      SYSTEM RECOMMENDATION
+                    </div>
+
+                    <h3>
+                      {recommendation}
+                    </h3>
+
+                    <p>
+                      {approvalReason}
+                    </p>
+
+                    <div className="eyebrow space-top">
+                      {experiment
+                        ? "EVIDENCE REQUIRED"
+                        : "SUPPORTING EVIDENCE"}
+                    </div>
+
+                    {experiment ? (
+                      evidenceRequests.length >
+                      0 ? (
+                        <ul className="evidence-list">
+                          {evidenceRequests.map(
+                            (request) => (
+                              <li
+                                key={
+                                  request
+                                }
+                              >
+                                <CircleHelp
+                                  size={15}
+                                />
+
+                                <span>
+                                  {
+                                    request
+                                  }
+                                </span>
+                              </li>
+                            ),
+                          )}
+                        </ul>
+                      ) : (
+                        <p>
+                          No additional
+                          evidence requests
+                          are blocking the
+                          recommended
+                          portfolio.
+                        </p>
+                      )
+                    ) : (
+                      <ul className="evidence-list">
+                        {supportingEvidence
+                          .slice(0, 4)
+                          .map(
+                            (item) => (
+                              <li
+                                key={
+                                  item.id
+                                }
+                              >
+                                <ShieldCheck
+                                  size={15}
+                                />
+
+                                <span>
+                                  {
+                                    item.claim
+                                  }
+                                </span>
+                              </li>
+                            ),
+                          )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="decision-economics">
+                    {experiment ? (
+                      <>
+                        <div>
+                          <span>
+                            SELECTED
+                          </span>
+
+                          <p>
+                            {
+                              selectedExperimentIds.length
+                            }{" "}
+                            experiments
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            ALLOCATED BUDGET
+                          </span>
+
+                          <p>
+                            {money(
+                              allocatedBudget,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            MODELED EXPECTED VALUE
+                          </span>
+
+                          <p>
+                            {money(
+                              modeledExpectedValue,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            EV / COST
+                          </span>
+
+                          <p>
+                            {expectedPortfolioROI !==
+                            undefined
+                              ? `${expectedPortfolioROI.toFixed(
+                                  1,
+                                )}x`
+                              : "—"}
+                          </p>
+                        </div>
+
+                        <div className="missing-box">
+                          <CircleHelp
+                            size={16}
+                          />
+
+                          <div>
+                            <span>
+                              Human boundary
+                            </span>
+
+                            <p>
+                              Portfolio
+                              selection does
+                              not spend budget
+                              or launch tests
+                              autonomously.
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <span>
+                            WarpScore
+                          </span>
+
+                          <p>
+                            {
+                              warpScore.score
+                            }{" "}
+                            / 100
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            Recommended motion
+                          </span>
+
+                          <p>
+                            {opportunity
+                              ?.recommendedMotion ??
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            Estimated ACV
+                          </span>
+
+                          <p>
+                            {money(
+                              opportunity
+                                ?.estimatedACV,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span>
+                            Expected value
+                          </span>
+
+                          <p>
+                            {money(
+                              opportunity
+                                ?.expectedValue,
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="missing-box">
+                          <CircleHelp
+                            size={16}
+                          />
+
+                          <div>
+                            <span>
+                              Missing information
+                            </span>
+
+                            <p>
+                              {revenueMissingInformation.length >
+                              0
+                                ? revenueMissingInformation.join(
+                                    " · ",
+                                  )
+                                : "No additional information explicitly requested by the opportunity engine."}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 20,
+                    paddingTop: 16,
+                    borderTop:
+                      "1px solid rgba(255,255,255,0.08)",
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(4, minmax(0, 1fr))",
+                    gap: 18,
+                  }}
+                >
+                  <div>
+                    <div className="eyebrow">
+                      SOURCE
+                    </div>
+
+                    <p>
+                      {decision.agent ??
+                        decision.source}
                     </p>
                   </div>
 
                   <div>
-                    <span>
-                      Recommended motion
-                    </span>
+                    <div className="eyebrow">
+                      CORRELATION
+                    </div>
 
                     <p>
-                      {opportunity
-                        ?.recommendedMotion ??
+                      {
+                        decision.correlationId
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="eyebrow">
+                      CAUSATION
+                    </div>
+
+                    <p>
+                      {decision.causationId ??
                         "—"}
                     </p>
                   </div>
 
                   <div>
-                    <span>
-                      Estimated ACV
-                    </span>
-
-                    <p>
-                      {money(
-                        opportunity
-                          ?.estimatedACV,
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span>
-                      Expected value
-                    </span>
-
-                    <p>
-                      {money(
-                        opportunity
-                          ?.expectedValue,
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="missing-box">
-                    <CircleHelp
-                      size={16}
-                    />
-
-                    <div>
-                      <span>
-                        Missing
-                        information
-                      </span>
-
-                      <p>
-                        {missingInformation.length >
-                        0
-                          ? missingInformation.join(
-                              " · ",
-                            )
-                          : "No additional information explicitly requested by the opportunity engine."}
-                      </p>
+                    <div className="eyebrow">
+                      AGENT STATE
                     </div>
+
+                    <p>
+                      {run?.status ??
+                        "SYSTEM REVIEW"}
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              <div
-                style={{
-                  marginTop: 20,
-                  paddingTop: 16,
-                  borderTop:
-                    "1px solid rgba(255,255,255,0.08)",
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(3, minmax(0, 1fr))",
-                  gap: 18,
-                }}
-              >
-                <div>
-                  <div className="eyebrow">
-                    CORRELATION
-                  </div>
+                <div className="decision-actions">
+                  <button className="secondary-button">
+                    Need more evidence
+                  </button>
 
-                  <p>
-                    {
-                      decision.correlationId
-                    }
-                  </p>
+                  <button className="secondary-button">
+                    Reject
+                  </button>
+
+                  <button className="primary-button">
+                    {experiment
+                      ? "Approve portfolio"
+                      : "Approve motion"}
+
+                    <ArrowRight
+                      size={15}
+                    />
+                  </button>
                 </div>
-
-                <div>
-                  <div className="eyebrow">
-                    CAUSATION
-                  </div>
-
-                  <p>
-                    {decision.causationId ??
-                      "—"}
-                  </p>
-                </div>
-
-                <div>
-                  <div className="eyebrow">
-                    AGENT STATE
-                  </div>
-
-                  <p>
-                    {agentRun?.status ??
-                      "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="decision-actions">
-                <button className="secondary-button">
-                  Need more evidence
-                </button>
-
-                <button className="secondary-button">
-                  Reject
-                </button>
-
-                <button className="primary-button">
-                  Approve motion
-
-                  <ArrowRight
-                    size={15}
-                  />
-                </button>
-              </div>
-            </article>
-          ),
+              </article>
+            );
+          },
         )}
       </div>
     </div>

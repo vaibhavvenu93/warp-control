@@ -15,112 +15,517 @@ function readString(
     : fallback;
 }
 
-function readBoolean(
+function readNumber(
   value: unknown,
-): boolean {
-  return value === true;
+): number | undefined {
+  return typeof value === "number"
+    ? value
+    : undefined;
+}
+
+function readStringArray(
+  value: unknown,
+): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string",
+      )
+    : [];
 }
 
 function statusClass(
   status: AgentRun["status"],
 ): string {
-  if (
-    status === "COMPLETED"
-  ) {
+  if (status === "COMPLETED") {
     return "badge badge-live";
   }
 
   if (
-    status ===
-    "REQUIRES_HUMAN"
+    status === "REQUIRES_HUMAN" ||
+    status === "FAILED"
   ) {
-    return "badge badge-assumed";
-  }
-
-  if (status === "FAILED") {
     return "badge badge-assumed";
   }
 
   return "badge badge-modeled";
 }
 
+function humanBoundary(
+  run: AgentRun,
+): string {
+  return run.status ===
+    "REQUIRES_HUMAN"
+    ? "HUMAN REVIEW"
+    : "AUTONOMOUS";
+}
+
+function agentLabel(
+  agent: AgentRun["agent"],
+): string {
+  if (
+    agent ===
+    "REVENUE_INTELLIGENCE"
+  ) {
+    return "Revenue Intelligence";
+  }
+
+  if (
+    agent ===
+    "EXPERIMENT_ANALYST"
+  ) {
+    return "Experiment Analyst";
+  }
+
+  return agent
+    .split("_")
+    .map(
+      (part) =>
+        part.charAt(0) +
+        part.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
+function agentDomain(
+  run: AgentRun,
+): string {
+  if (
+    run.agent ===
+    "REVENUE_INTELLIGENCE"
+  ) {
+    return "COMMERCIAL INTELLIGENCE";
+  }
+
+  if (
+    run.agent ===
+    "EXPERIMENT_ANALYST"
+  ) {
+    return "EXPERIMENT INTELLIGENCE";
+  }
+
+  return "COMPANY INTELLIGENCE";
+}
+
+function agentObjective(
+  run: AgentRun,
+): string {
+  const output =
+    run.output ?? {};
+
+  if (
+    run.agent ===
+    "EXPERIMENT_ANALYST"
+  ) {
+    return readString(
+      output.portfolioRecommendation,
+      readString(
+        output.nextAction,
+        "Evaluate the experiment portfolio.",
+      ),
+    );
+  }
+
+  return readString(
+    output.nextAction,
+    "Review agent recommendation.",
+  );
+}
+
+function agentReasoning(
+  run: AgentRun,
+): string {
+  const output =
+    run.output ?? {};
+
+  return readString(
+    output.reasoningSummary,
+    readString(
+      output.approvalReason,
+      "No reasoning summary returned.",
+    ),
+  );
+}
+
+function AgentCard({
+  run,
+  index,
+}: {
+  run: AgentRun;
+  index: number;
+}) {
+  const output =
+    run.output ?? {};
+
+  const evidenceRequests =
+    readStringArray(
+      output.evidenceRequests,
+    );
+
+  const warnings =
+    readStringArray(
+      output.warnings,
+    );
+
+  const selectedCount =
+    readNumber(
+      output.selectedCount,
+    );
+
+  const allocatedBudget =
+    readNumber(
+      output.allocatedBudget,
+    );
+
+  const expectedPortfolioROI =
+    readNumber(
+      output.expectedPortfolioROI,
+    );
+
+  const commercialPriority =
+    readString(
+      output.commercialPriority,
+    );
+
+  const recommendedMotion =
+    readString(
+      output.recommendedMotion,
+    );
+
+  return (
+    <article className="decision-card">
+      <div className="decision-card-header">
+        <div>
+          <div className="signal-meta">
+            <span>
+              {String(
+                index + 1,
+              ).padStart(2, "0")}
+            </span>
+
+            <span>•</span>
+
+            <span>
+              {agentDomain(run)}
+            </span>
+
+            <span>•</span>
+
+            <span>
+              {run.trigger}
+            </span>
+          </div>
+
+          <h2>
+            {agentLabel(
+              run.agent,
+            )}
+          </h2>
+
+          <p
+            style={{
+              marginTop: 8,
+              maxWidth: 760,
+            }}
+          >
+            {agentObjective(run)}
+          </p>
+        </div>
+
+        <div className="confidence-ring">
+          <strong>
+            {run.confidence ??
+              "—"}
+            {run.confidence !==
+            undefined
+              ? "%"
+              : ""}
+          </strong>
+
+          <span>
+            CONFIDENCE
+          </span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginTop: 18,
+        }}
+      >
+        <span
+          className={statusClass(
+            run.status,
+          )}
+        >
+          {run.status}
+        </span>
+
+        <span className="badge badge-modeled">
+          {run.toolsCalled.length} TOOLS
+        </span>
+
+        <span className="badge badge-public">
+          {run.evidenceIds.length} EVIDENCE
+        </span>
+
+        <span className="badge badge-assumed">
+          {humanBoundary(run)}
+        </span>
+      </div>
+
+      <div
+        className="decision-columns"
+        style={{
+          marginTop: 22,
+        }}
+      >
+        <div>
+          <div className="eyebrow">
+            REASONING SUMMARY
+          </div>
+
+          <p>
+            {agentReasoning(run)}
+          </p>
+
+          <div className="eyebrow space-top">
+            CAPABILITIES INVOKED
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginTop: 10,
+            }}
+          >
+            {run.toolsCalled.map(
+              (tool) => (
+                <span
+                  className="badge badge-live"
+                  key={tool}
+                >
+                  {tool}
+                </span>
+              ),
+            )}
+          </div>
+
+          {warnings.length >
+            0 && (
+            <>
+              <div className="eyebrow space-top">
+                RUNTIME WARNINGS
+              </div>
+
+              <p>
+                {warnings.join(
+                  " · ",
+                )}
+              </p>
+            </>
+          )}
+
+          {evidenceRequests.length >
+            0 && (
+            <>
+              <div className="eyebrow space-top">
+                EVIDENCE REQUESTS
+              </div>
+
+              <p>
+                {evidenceRequests.join(
+                  " · ",
+                )}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="decision-economics">
+          {run.agent ===
+          "REVENUE_INTELLIGENCE" ? (
+            <>
+              <div>
+                <span>
+                  COMMERCIAL PRIORITY
+                </span>
+
+                <p>
+                  {commercialPriority}
+                </p>
+              </div>
+
+              <div>
+                <span>
+                  GTM MOTION
+                </span>
+
+                <p>
+                  {recommendedMotion}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <span>
+                  SELECTED
+                </span>
+
+                <p>
+                  {selectedCount ??
+                    "—"}{" "}
+                  experiments
+                </p>
+              </div>
+
+              <div>
+                <span>
+                  ALLOCATED BUDGET
+                </span>
+
+                <p>
+                  {allocatedBudget !==
+                  undefined
+                    ? `$${allocatedBudget.toLocaleString(
+                        "en-US",
+                      )}`
+                    : "—"}
+                </p>
+              </div>
+
+              <div>
+                <span>
+                  PORTFOLIO EV / COST
+                </span>
+
+                <p>
+                  {expectedPortfolioROI !==
+                  undefined
+                    ? `${expectedPortfolioROI.toFixed(
+                        1,
+                      )}x`
+                    : "—"}
+                </p>
+              </div>
+            </>
+          )}
+
+          <div>
+            <span>
+              LATENCY
+            </span>
+
+            <p>
+              {run.latencyMs ??
+                "—"}{" "}
+              ms
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 20,
+          paddingTop: 16,
+          borderTop:
+            "1px solid rgba(255,255,255,0.08)",
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(3, minmax(0, 1fr))",
+          gap: 18,
+        }}
+      >
+        <div>
+          <div className="eyebrow">
+            RUN ID
+          </div>
+
+          <p>
+            {run.id}
+          </p>
+        </div>
+
+        <div>
+          <div className="eyebrow">
+            CORRELATION
+          </div>
+
+          <p>
+            {readString(
+              run.input
+                .correlationId,
+            )}
+          </p>
+        </div>
+
+        <div>
+          <div className="eyebrow">
+            CAUSATION
+          </div>
+
+          <p>
+            {readString(
+              run.input
+                .causationId,
+            )}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default async function AgentsPage() {
   const snapshot =
     await buildRevenueDemo();
 
-  const run =
-    snapshot.agentRuns[0];
+  const humanReviewCount =
+    snapshot.agentRuns.filter(
+      (run) =>
+        run.status ===
+        "REQUIRES_HUMAN",
+    ).length;
 
-  if (!run) {
-    return (
-      <div className="page">
-        <section className="placeholder-page">
-          <div className="eyebrow">
-            AGENT RUNTIME
-          </div>
-
-          <h1>
-            No agent execution
-          </h1>
-
-          <p className="placeholder-lead">
-            No agent run was produced
-            by the current control-plane
-            scenario.
-          </p>
-        </section>
-      </div>
-    );
-  }
-
-  const output =
-    run.output ?? {};
-
-  const reasoningSummary =
-    readString(
-      output.reasoningSummary,
-      "No reasoning summary returned.",
+  const toolCount =
+    snapshot.agentRuns.reduce(
+      (
+        total,
+        run,
+      ) =>
+        total +
+        run.toolsCalled.length,
+      0,
     );
 
-  const nextAction =
-    readString(
-      output.nextAction,
-      "No action returned.",
+  const evidenceCount =
+    snapshot.agentRuns.reduce(
+      (
+        total,
+        run,
+      ) =>
+        total +
+        run.evidenceIds.length,
+      0,
     );
 
-  const approvalReason =
-    readString(
-      output.approvalReason,
-      "No additional approval reason.",
-    );
-
-  const priority =
-    readString(
-      output.commercialPriority,
-      "—",
-    );
-
-  const motion =
-    readString(
-      output.recommendedMotion,
-      "—",
-    );
-
-  const requiresHumanReview =
-    readBoolean(
-      output.requiresHumanReview,
-    );
-
-  const warnings =
-    Array.isArray(output.warnings)
-      ? output.warnings.filter(
-          (
-            warning,
-          ): warning is string =>
-            typeof warning ===
-            "string",
-        )
-      : [];
+  const correlationCount =
+    new Set(
+      snapshot.agentRuns.map(
+        (run) =>
+          readString(
+            run.input
+              .correlationId,
+          ),
+      ),
+    ).size;
 
   return (
     <div className="page">
@@ -131,25 +536,29 @@ export default async function AgentsPage() {
           </div>
 
           <h1>
-            Agent execution
+            Multi-agent execution
           </h1>
 
           <p>
-            Observable AI execution with
-            explicit inputs, evidence,
-            tools, confidence, latency,
-            output and human judgment
-            boundaries.
+            Observable specialist agents
+            operating through one control
+            plane with explicit evidence,
+            tools, confidence, lineage and
+            human judgment boundaries.
           </p>
         </div>
 
         <div className="decision-summary">
           <strong>
-            {snapshot.agentRuns.length}
+            {
+              snapshot
+                .agentRuns
+                .length
+            }
           </strong>
 
           <span>
-            EXECUTION IN TRACE
+            EXECUTIONS IN TRACE
           </span>
         </div>
       </header>
@@ -162,7 +571,7 @@ export default async function AgentsPage() {
         }}
       >
         <span>
-          AGENT POLICY
+          SHARED AGENT RUNTIME
         </span>
 
         <p
@@ -170,185 +579,51 @@ export default async function AgentsPage() {
             marginTop: 7,
           }}
         >
-          Agents may research, score,
-          synthesize and recommend.
-          High-consequence commercial
-          actions remain visible to a
-          human before execution.
+          Revenue Intelligence and
+          Experiment Analyst execute
+          independently while sharing
+          the same event bus, event
+          store, agent-run repository
+          and CEO decision layer.
         </p>
       </div>
 
       <section>
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow">
-              EXECUTION RECORD
-            </div>
-
-            <h2>
-              {run.agent}
-            </h2>
-          </div>
-
-          <span
-            className={statusClass(
-              run.status,
-            )}
-          >
-            {run.status}
-          </span>
-        </div>
-
-        <article className="decision-card">
-          <div className="decision-card-header">
-            <div>
-              <div className="signal-meta">
-                <span>
-                  TRIGGER{" "}
-                  {run.trigger}
-                </span>
-
-                <span>•</span>
-
-                <span>
-                  RUN {run.id}
-                </span>
-              </div>
-
-              <h2>
-                {nextAction}
-              </h2>
-            </div>
-
-            <div className="confidence-ring">
-              <strong>
-                {run.confidence ?? "—"}
-                {run.confidence !==
-                undefined
-                  ? "%"
-                  : ""}
-              </strong>
-
-              <span>
-                AGENT CONFIDENCE
-              </span>
-            </div>
-          </div>
-
-          <div className="decision-columns">
-            <div>
-              <div className="eyebrow">
-                REASONING SUMMARY
-              </div>
-
-              <p>
-                {reasoningSummary}
-              </p>
-
-              <div className="eyebrow space-top">
-                HUMAN REVIEW
-              </div>
-
-              <h3>
-                {requiresHumanReview
-                  ? "Required before execution"
-                  : "Not required"}
-              </h3>
-
-              <p>
-                {approvalReason}
-              </p>
-            </div>
-
-            <div className="decision-economics">
-              <div>
-                <span>
-                  COMMERCIAL PRIORITY
-                </span>
-
-                <p>{priority}</p>
-              </div>
-
-              <div>
-                <span>
-                  GTM MOTION
-                </span>
-
-                <p>{motion}</p>
-              </div>
-
-              <div>
-                <span>
-                  LATENCY
-                </span>
-
-                <p>
-                  {run.latencyMs ??
-                    "—"}{" "}
-                  ms
-                </p>
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section>
-        <div className="section-heading compact">
-          <div>
-            <div className="eyebrow">
-              OBSERVABILITY
-            </div>
-
-            <h2>
-              Runtime telemetry
-            </h2>
-          </div>
-
-          <span className="muted">
-            CORRELATION PRESERVED
-          </span>
-        </div>
-
         <div className="metric-grid">
           <article className="metric-card">
             <div className="card-top">
               <span>
-                Status
+                Specialist agents
               </span>
 
-              <span
-                className={statusClass(
-                  run.status,
-                )}
-              >
-                LIVE TRACE
+              <span className="badge badge-live">
+                ACTIVE
               </span>
             </div>
 
-            <strong
-              className="metric-value"
-              style={{
-                fontSize: 20,
-              }}
-            >
-              {run.status}
+            <strong className="metric-value">
+              {
+                snapshot
+                  .agentRuns
+                  .length
+              }
             </strong>
 
             <span className="metric-change">
-              Policy evaluated
+              Shared runtime
             </span>
 
             <p>
-              Execution state is
-              persisted by the runtime.
+              Domain agents execute
+              independently rather than
+              hiding inside one chatbot.
             </p>
           </article>
 
           <article className="metric-card">
             <div className="card-top">
               <span>
-                Tools
+                Tool calls
               </span>
 
               <span className="badge badge-modeled">
@@ -357,28 +632,24 @@ export default async function AgentsPage() {
             </div>
 
             <strong className="metric-value">
-              {
-                run.toolsCalled
-                  .length
-              }
+              {toolCount}
             </strong>
 
             <span className="metric-change">
-              Recorded calls
+              Runtime capabilities
             </span>
 
             <p>
-              Tool usage is retained
-              with the agent run rather
-              than hidden inside a
-              chatbot.
+              Every declared capability
+              is retained with its
+              execution trace.
             </p>
           </article>
 
           <article className="metric-card">
             <div className="card-top">
               <span>
-                Evidence
+                Evidence refs
               </span>
 
               <span className="badge badge-public">
@@ -387,27 +658,24 @@ export default async function AgentsPage() {
             </div>
 
             <strong className="metric-value">
-              {
-                run.evidenceIds
-                  .length
-              }
+              {evidenceCount}
             </strong>
 
             <span className="metric-change">
-              Evidence IDs
+              Provenance links
             </span>
 
             <p>
-              Outputs can be traced back
-              to evidence supplied to
-              the execution context.
+              Agent outputs remain
+              connected to supplied
+              evidence.
             </p>
           </article>
 
           <article className="metric-card">
             <div className="card-top">
               <span>
-                Human boundary
+                Human boundaries
               </span>
 
               <span className="badge badge-assumed">
@@ -415,90 +683,48 @@ export default async function AgentsPage() {
               </span>
             </div>
 
-            <strong
-              className="metric-value"
-              style={{
-                fontSize: 20,
-              }}
-            >
-              {requiresHumanReview
-                ? "REVIEW"
-                : "AUTONOMOUS"}
+            <strong className="metric-value">
+              {humanReviewCount}
             </strong>
 
             <span className="metric-change">
-              Judgment boundary
+              Approval required
             </span>
 
             <p>
               High-consequence actions
-              can stop for CEO or
-              operator approval.
+              stop before autonomous
+              execution.
             </p>
           </article>
         </div>
       </section>
 
       <section>
-        <div className="section-heading compact">
+        <div className="section-heading">
           <div>
             <div className="eyebrow">
-              TOOL TRACE
+              EXECUTION TRACES
             </div>
 
             <h2>
-              Capabilities invoked
+              Agent runtime
             </h2>
           </div>
 
           <span className="muted">
-            {
-              run.toolsCalled
-                .length
-            }{" "}
-            TOOLS
+            {correlationCount} CORRELATION CHAINS
           </span>
         </div>
 
         <div className="decision-list">
-          {run.toolsCalled.map(
-            (tool, index) => (
-              <article
-                className="decision-card"
-                key={tool}
-                style={{
-                  padding: 16,
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "50px minmax(220px, 1fr) 130px",
-                    alignItems:
-                      "center",
-                    gap: 18,
-                  }}
-                >
-                  <div className="eyebrow">
-                    {String(
-                      index + 1,
-                    ).padStart(2, "0")}
-                  </div>
-
-                  <h3
-                    style={{
-                      margin: 0,
-                    }}
-                  >
-                    {tool}
-                  </h3>
-
-                  <span className="badge badge-live">
-                    CALLED
-                  </span>
-                </div>
-              </article>
+          {snapshot.agentRuns.map(
+            (run, index) => (
+              <AgentCard
+                key={run.id}
+                run={run}
+                index={index}
+              />
             ),
           )}
         </div>
@@ -508,11 +734,11 @@ export default async function AgentsPage() {
         <div className="section-heading compact">
           <div>
             <div className="eyebrow">
-              EXECUTION CONTEXT
+              RUNTIME ARCHITECTURE
             </div>
 
             <h2>
-              Provenance & lineage
+              Observable by design
             </h2>
           </div>
         </div>
@@ -521,101 +747,64 @@ export default async function AgentsPage() {
           <div className="decision-economics">
             <div>
               <span>
-                CORRELATION ID
+                EVENT STORE
               </span>
 
               <p>
-                {readString(
-                  run.input
-                    .correlationId,
-                )}
+                {
+                  snapshot
+                    .telemetry
+                    .eventCount
+                }{" "}
+                events
               </p>
             </div>
 
             <div>
               <span>
-                CAUSATION ID
+                AGENT RUNS
               </span>
 
               <p>
-                {readString(
-                  run.input
-                    .causationId,
-                )}
+                {
+                  snapshot
+                    .telemetry
+                    .agentRunCount
+                }
               </p>
             </div>
 
             <div>
               <span>
-                ACCOUNT ID
+                CORRELATION CHAINS
               </span>
 
               <p>
-                {readString(
-                  run.input
-                    .accountId,
-                )}
+                {
+                  snapshot
+                    .telemetry
+                    .correlationIds
+                    .length
+                }
               </p>
             </div>
 
             <div>
               <span>
-                OPPORTUNITY ID
+                HUMAN REVIEWS
               </span>
 
               <p>
-                {readString(
-                  run.input
-                    .opportunityId,
-                )}
+                {
+                  snapshot
+                    .telemetry
+                    .humanReviewCount
+                }
               </p>
             </div>
           </div>
         </article>
       </section>
-
-      {warnings.length > 0 && (
-        <section>
-          <div className="section-heading compact">
-            <div>
-              <div className="eyebrow">
-                RUNTIME WARNINGS
-              </div>
-
-              <h2>
-                Agent warnings
-              </h2>
-            </div>
-          </div>
-
-          <div className="decision-list">
-            {warnings.map(
-              (warning) => (
-                <article
-                  className="decision-card"
-                  key={warning}
-                  style={{
-                    padding: 16,
-                  }}
-                >
-                  <span className="badge badge-assumed">
-                    WARNING
-                  </span>
-
-                  <p
-                    style={{
-                      margin:
-                        "10px 0 0",
-                    }}
-                  >
-                    {warning}
-                  </p>
-                </article>
-              ),
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
