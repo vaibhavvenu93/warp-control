@@ -1,0 +1,142 @@
+name: WARP CONTROL WarpBuild CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  warpbuild:
+    name: WarpBuild / 2x runner
+    runs-on: warp-ubuntu-latest-x64-2x
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Record experiment metadata
+        shell: bash
+        run: |
+          mkdir -p benchmark-results
+
+          echo "EXPERIMENT_START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
+
+          echo "## WARP CONTROL — WarpBuild CI Experiment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Provider | WarpBuild |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner | warp-ubuntu-latest-x64-2x |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Repository | $GITHUB_REPOSITORY |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`$GITHUB_SHA\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run ID | $GITHUB_RUN_ID |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run attempt | $GITHUB_RUN_ATTEMPT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install dependencies
+        id: install
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npm ci
+          END=$(date +%s%3N)
+          DURATION=$((END - START))
+
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "INSTALL_MS=$DURATION" >> "$GITHUB_ENV"
+
+      - name: TypeScript check
+        id: typecheck
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npx tsc --noEmit
+          END=$(date +%s%3N)
+          DURATION=$((END - START))
+
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "TYPECHECK_MS=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        id: tests
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npx vitest run
+          END=$(date +%s%3N)
+          DURATION=$((END - START))
+
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "TEST_MS=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Production build
+        id: build
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npm run build
+          END=$(date +%s%3N)
+          DURATION=$((END - START))
+
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "BUILD_MS=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Write benchmark evidence
+        if: always()
+        shell: bash
+        run: |
+          END_MS=$(date +%s%3N)
+          TOTAL_MS=$((END_MS - EXPERIMENT_START_MS))
+
+          INSTALL="${INSTALL_MS:-0}"
+          TYPECHECK="${TYPECHECK_MS:-0}"
+          TESTS="${TEST_MS:-0}"
+          BUILD="${BUILD_MS:-0}"
+
+          cat > benchmark-results/warpbuild.json <<EOF
+          {
+            "schemaVersion": "1.0",
+            "experiment": "warp-control-ci-benchmark",
+            "provider": "WARPBUILD",
+            "runner": "warp-ubuntu-latest-x64-2x",
+            "repository": "$GITHUB_REPOSITORY",
+            "commitSha": "$GITHUB_SHA",
+            "runId": "$GITHUB_RUN_ID",
+            "runAttempt": "$GITHUB_RUN_ATTEMPT",
+            "capturedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "stages": {
+              "installMs": $INSTALL,
+              "typecheckMs": $TYPECHECK,
+              "testMs": $TESTS,
+              "buildMs": $BUILD
+            },
+            "totalObservedMs": $TOTAL_MS
+          }
+          EOF
+
+          echo "### Observed stage timings" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stage | Observed duration |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Install | ${INSTALL} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| TypeScript | ${TYPECHECK} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tests | ${TESTS} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build | ${BUILD} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Experiment wall clock | ${TOTAL_MS} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> These are observed measurements from this specific WarpBuild run. They are not a general WarpBuild performance claim." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpbuild-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: benchmark-results/warpbuild.json
+          retention-days: 30
