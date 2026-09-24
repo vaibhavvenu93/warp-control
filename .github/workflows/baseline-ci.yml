@@ -1,0 +1,151 @@
+name: WARP CONTROL Baseline CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cluster-2-revenue-engine
+    paths:
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vitest.config.ts"
+      - "next.config.ts"
+      - ".github/workflows/baseline-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Baseline / GitHub-hosted runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Record experiment metadata
+        shell: bash
+        run: |
+          echo "EXPERIMENT_START=$(date +%s%3N)" >> "$GITHUB_ENV"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Commit: $GITHUB_SHA"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner architecture: $RUNNER_ARCH"
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        id: install
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npm ci
+          END=$(date +%s%3N)
+          DURATION=$((END-START))
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "Install duration: ${DURATION}ms"
+
+      - name: TypeScript validation
+        id: typecheck
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npx tsc --noEmit
+          END=$(date +%s%3N)
+          DURATION=$((END-START))
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "TypeScript duration: ${DURATION}ms"
+
+      - name: Test suite
+        id: tests
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npx vitest run
+          END=$(date +%s%3N)
+          DURATION=$((END-START))
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "Test duration: ${DURATION}ms"
+
+      - name: Production build
+        id: build
+        shell: bash
+        run: |
+          START=$(date +%s%3N)
+          npm run build
+          END=$(date +%s%3N)
+          DURATION=$((END-START))
+          echo "duration_ms=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "Build duration: ${DURATION}ms"
+
+      - name: Write benchmark evidence
+        if: always()
+        shell: bash
+        run: |
+          END=$(date +%s%3N)
+          TOTAL=$((END-EXPERIMENT_START))
+
+          mkdir -p benchmark-results
+
+          cat > benchmark-results/baseline.json <<EOF
+          {
+            "schemaVersion": "1.0",
+            "experiment": "warp-control-ci-baseline",
+            "provider": "GITHUB_ACTIONS",
+            "runner": "ubuntu-latest",
+            "repository": "${GITHUB_REPOSITORY}",
+            "commitSha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "runAttempt": "${GITHUB_RUN_ATTEMPT}",
+            "capturedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "stages": {
+              "installMs": "${{ steps.install.outputs.duration_ms }}",
+              "typecheckMs": "${{ steps.typecheck.outputs.duration_ms }}",
+              "testMs": "${{ steps.tests.outputs.duration_ms }}",
+              "buildMs": "${{ steps.build.outputs.duration_ms }}"
+            },
+            "totalObservedMs": "${TOTAL}"
+          }
+          EOF
+
+          cat benchmark-results/baseline.json
+
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warp-control-baseline-${{ github.run_id }}
+          path: benchmark-results/baseline.json
+          retention-days: 30
+
+      - name: Experiment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## WARP / CONTROL — CI Baseline"
+            echo ""
+            echo "| Stage | Observed duration |"
+            echo "|---|---:|"
+            echo "| Install | ${{ steps.install.outputs.duration_ms }} ms |"
+            echo "| TypeScript | ${{ steps.typecheck.outputs.duration_ms }} ms |"
+            echo "| Tests | ${{ steps.tests.outputs.duration_ms }} ms |"
+            echo "| Build | ${{ steps.build.outputs.duration_ms }} ms |"
+            echo ""
+            echo "**Provider:** GitHub Actions"
+            echo ""
+            echo "**Runner:** ubuntu-latest"
+            echo ""
+            echo "**Commit:** \`${GITHUB_SHA}\`"
+            echo ""
+            echo "These are observed experiment measurements, not modeled WarpBuild performance."
+          } >> "$GITHUB_STEP_SUMMARY"
