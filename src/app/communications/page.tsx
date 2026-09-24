@@ -1,15 +1,16 @@
-﻿export default function Page() {
+﻿import CommunicationsDashboard from "@/components/communications/communications-dashboard";
+import { buildCommunicationsDemo } from "@/services/communications-control-plane";
+
+export default async function CommunicationsPage() {
+  const controlPlane =
+    await buildCommunicationsDemo();
+
+  const snapshot =
+    await controlPlane.getSnapshot();
+
   return (
-    <div className="page">
-      <section className="placeholder-page">
-        <div className="eyebrow">WARP / CONTROL</div>
-        <h1>Communications</h1>
-        <p className="placeholder-lead">Turn company truth into clear communication.</p>
-        <div className="coming-card">
-          <span>MODULE ARCHITECTED</span>
-          <p>Investor updates and external briefs land in Cluster 5.</p>
-        </div>
-      </section>
-    </div>
+    <CommunicationsDashboard
+      snapshot={snapshot}
+    />
   );
 }
