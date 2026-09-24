@@ -136,6 +136,92 @@ export interface MarketRadarMetrics {
   averageConfidence: number;
 }
 
+/*
+ * ------------------------------------------------------------------
+ * Intelligence-network presentation types
+ * ------------------------------------------------------------------
+ *
+ * These are intentionally separate from the ingestion domain.
+ * The ingestion layer represents what the system actually fetches.
+ * This layer represents what an executive needs to understand about
+ * source health, provenance and evidence lineage.
+ */
+
+export type RadarSourceHealthStatus =
+  | "HEALTHY"
+  | "DEGRADED"
+  | "FAILING"
+  | "UNKNOWN";
+
+export type RadarEpistemicState =
+  | "OBSERVED"
+  | "CORROBORATED"
+  | "INFERRED"
+  | "MODELED";
+
+export interface RadarSourceNode {
+  id: string;
+  name: string;
+  kind: string;
+  status: RadarSourceHealthStatus;
+  trust: number;
+  latencyMs: number;
+  lastObservedAt: string;
+  observationCount: number;
+  mode:
+    | "PUBLIC"
+    | "DEMO"
+    | "CONNECTED";
+}
+
+export interface RadarEvidenceLineage {
+  signalId: string;
+
+  epistemicState:
+    RadarEpistemicState;
+
+  claim: string;
+
+  observation: string;
+
+  sourceIds: string[];
+
+  independentSourceCount:
+    number;
+
+  confidence: number;
+
+  freshness: number;
+
+  interpretation: string;
+
+  implication: string;
+
+  proposedAction: string;
+
+  humanReviewRequired:
+    boolean;
+}
+
+export interface RadarIntelligenceNetwork {
+  mode:
+    | "GOVERNED_DEMO"
+    | "LIVE";
+
+  cycleStatus:
+    | "READY"
+    | "PROCESSING"
+    | "DEGRADED";
+
+  lastCycleAt: string;
+
+  sources:
+    RadarSourceNode[];
+
+  lineage:
+    RadarEvidenceLineage[];
+}
+
 export interface MarketRadarSnapshot {
   generatedAt: string;
   systemStatus: "ONLINE";
@@ -143,5 +229,9 @@ export interface MarketRadarSnapshot {
   trends: MarketTrend[];
   metrics: MarketRadarMetrics;
   attention: MarketSignal[];
+
+  intelligence:
+    RadarIntelligenceNetwork;
+
   disclaimer: string;
 }

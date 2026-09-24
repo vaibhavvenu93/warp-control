@@ -4,6 +4,10 @@ import {
 } from "@/data/demo/market-radar/market-radar-corpus";
 
 import {
+  marketRadarIntelligenceNetwork,
+} from "@/data/demo/market-radar/intelligence-network";
+
+import {
   rankMarketSignals,
 } from "@/domain/market-radar/signal-engine";
 
@@ -199,7 +203,10 @@ export function buildMarketRadarSnapshot():
 
     attention,
 
+    intelligence:
+      marketRadarIntelligenceNetwork,
+
     disclaimer:
-      "Market Radar currently uses synthetic and modeled intelligence to demonstrate the operating architecture. It does not represent verified live competitor activity, customer behavior or WarpBuild commercial performance. Public-source ingestion is intentionally separated from the scoring and decision layers so live sources can replace the demo corpus without redesigning the system.",
+      "Market Radar currently uses a governed demonstration intelligence network. The ingestion, source monitoring, observation normalization, claim triangulation and Company Brain bridge are implemented as tested production-style architecture, while the visible market scenarios remain synthetic or modeled unless explicitly marked as externally observed. The interface does not claim live market intelligence unless a source has actually been fetched, validated and recorded by the governed ingestion pipeline. No demo scenario should be interpreted as verified current competitor, customer or WarpBuild commercial activity.",
   };
 }
